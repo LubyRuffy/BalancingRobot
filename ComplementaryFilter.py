@@ -1,5 +1,5 @@
 class ComplementaryFilter:
-    def __init__(self, alpha, valInit):
+    def __init__(self, alpha, valInit=0.0):
         """Initializes the fiter. The filter is of the form:
         output = (1 - alpha) * (output_old * gyro * dt) + alpha * acc
 
@@ -16,7 +16,10 @@ class ComplementaryFilter:
             + (self._alpha * accData)
         return self._valOut
 
-    def Reset(self, valInit):
+    def Value():
+        return self._valOut
+
+    def Reset(self, valInit=0.0):
         """Resets the filter.
 
         Arguments:
