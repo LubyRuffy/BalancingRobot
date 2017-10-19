@@ -25,6 +25,10 @@
 # python_version  :2.7
 # ==============================================================================
 
+# Modifications 10/19/17
+# -Return output from update function
+# -Added rate_value to update function, use if provided
+
 """Ivmech PID Controller is simple implementation of a Proportional-Integral-Derivative (PID) Controller in the Python Programming Language.
 More information about PID Controller: http://en.wikipedia.org/wiki/PID_controller
 """
@@ -61,7 +65,7 @@ class PID:
 
         self.output = 0.0
 
-    def update(self, feedback_value):
+    def update(self, feedback_value, rate_value = None):
         """Calculates PID value for given reference feedback
 
         .. math::
@@ -90,13 +94,17 @@ class PID:
 
             self.DTerm = 0.0
             if delta_time > 0:
-                self.DTerm = delta_error / delta_time
+                if rate_value == None:
+                    self.DTerm = delta_error / delta_time
+                else:
+                    self.DTerm = rate_value
 
             # Remember last time and last error for next calculation
             self.last_time = self.current_time
             self.last_error = error
 
             self.output = self.PTerm + (self.Ki * self.ITerm) + (self.Kd * self.DTerm)
+            return self.output
 
     def setKp(self, proportional_gain):
         """Determines how aggressively the PID reacts to the current error with setting Proportional Gain"""
