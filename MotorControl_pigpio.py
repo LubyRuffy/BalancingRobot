@@ -11,6 +11,9 @@ class MotorControl_pigpio:
         self._pinFWD = pinFWD
         self._pinREV = pinREV
 
+        self._lastDir = 0 # last direction
+        self._lastVoltCmnd = 0.0
+
         pi.set_mode(self._pinPWM, pigpio.OUTPUT)
         pi.set_mode(self._pinFWD, pigpio.OUTPUT)
         pi.set_mode(self._pinREV, pigpio.OUTPUT)
@@ -33,14 +36,17 @@ class MotorControl_pigpio:
         self._pi.set_PWM_dutycycle(self._pinPWM, pwm)
 
     def SetVoltage(self, V):
-        if V > 0.0:
-            self._pi.write(self._pinFWD, 1)
-            self._pi.write(self._pinREV, 0)
-        if V < 0.0:
-            self._pi.write(self._pinFWD, 0)
-            self._pi.write(self._pinREV, 1)
+        self.SetDirection(V)
         pwm = self._lookupTable.Lookup(abs(V))
-        self._pi.set_PWM_dutycycle(self._pinPWM, pwm)
+        self.SetPwmDutyCycle(pwm)
+
+    def SetDirection(self, dir):
+        if dir > 0.0:
+            self.Fwd()
+        if dir < 0.0:
+            self.Rev()
+        else:
+            self.Float()
 
     def Fwd(self):
         self._pi.write(self._pinFWD, 1)
