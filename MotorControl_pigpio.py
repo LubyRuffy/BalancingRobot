@@ -2,7 +2,7 @@ import pigpio
 
 
 class MotorControl_pigpio:
-    PWM_FREQ = 100.0
+    PWM_FREQ = 30.0
     PWM_DEFAULT_SPD = 0.0
 
     def __init__(self, pi, pinPWM, pinFWD, pinREV):
@@ -41,6 +41,14 @@ class MotorControl_pigpio:
             self._pi.write(self._pinREV, 1)
         pwm = self._lookupTable.Lookup(abs(V))
         self._pi.set_PWM_dutycycle(self._pinPWM, pwm)
+
+    def Fwd(self):
+        self._pi.write(self._pinFWD, 1)
+        self._pi.write(self._pinREV, 0)
+
+    def Rev(self):
+        self._pi.write(self._pinFWD, 0)
+        self._pi.write(self._pinREV, 1)
 
     def Brake(self):
         self._pi.write(self._pinFWD, 0)
