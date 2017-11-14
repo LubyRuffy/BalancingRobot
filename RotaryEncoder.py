@@ -97,28 +97,34 @@ class RotaryEncoder:
         return self.count
 
 if __name__ == "__main__":
+    import time
+    import pigpio
 
-   import time
-   import pigpio
+    from RotaryEncoder import *
 
-   from RotaryEncoder import *
+    pi = pigpio.pi()
 
-   pi = pigpio.pi()
+    ml = RotaryEncoder(pi, 19, 26)
+    mr = RotaryEncoder(pi, 19, 26)
+    prev_time = time.time()
+    pl = 0
+    pr = 0
 
-   decoder = RotaryEncoder(pi, 19, 26)
-   prev_time = time.time()
-   prev_count = 0
+    while 1:
+        current_time = time.time()
+        dt = current_time - prev_time
+        prev_time = current_time
+        cl = ml.getCount()
+        cr = mr.getCount()
+        dl = cl - pl
+        dr = cr - pr
+        pl = cl
+        cr = cr
+        rpm_l = (1/dt) * (float(dl) / (16.0*90.0))*60.0
+        rpm_r = (1/dt) * (float(dr) / (16.0*90.0))*60.0
+        print "RPM: {0:.1f}, {1:.1f}".format(rpm_l, rpm_r)
+        time.sleep(0.1)
 
-   while 1:
-      current_time = time.time()
-      dt = current_time - prev_time
-      prev_time = current_time
-      current_count = decoder.getCount()
-      dcount = current_count - prev_count
-      prev_count = current_count
-      rpm = (1/dt) * (float(dcount) / (16.0*90.0))*60.0
-      print "RPM: {0}".format(rpm)
-      time.sleep(0.1)
-
-   decoder.cancel()
-   pi.stop()
+    ml.cancel()
+    mr.cancel()
+    pi.stop()
