@@ -59,9 +59,11 @@ class MotorControl_pigpio:
             elif dir < 0.0:
                 self.Rev()
             else:
+                #self.Float()
                 self.Brake()
                 self._lastZeroTime = currTime
         else:
+            #self.Float()
             self.Brake()
             if self._lastState != MotorControl_pigpio.STATE_ZERO:
                 self._lastZeroTime = currTime

@@ -97,9 +97,9 @@ class RobotThread(threading.Thread):
         self._w_off = [-1.07, 0.67, -1.55]
         #self._a_off = [0.0, 0.0, 0.0]
         #self._w_off = [0.0, 0.0, 0.0]
-        self._thetaXFilt = ComplementaryFilter(alpha=0.1) # alpha = 0.02
-        self._thetaXFilt2 = Filter(timeConst=0.3)
-        self._wXFilt = Filter(timeConst=0.3)
+        self._thetaXFilt = ComplementaryFilter(alpha=0.05) # alpha = 0.02
+        self._thetaXFilt2 = Filter(timeConst=0.0)
+        self._wXFilt = Filter(timeConst=0.0)
         self._mpu6050 = mpu6050(0x68) # 0x68 - default I2C slave addr
         self._mpu6050.set_accel_range(mpu6050.ACCEL_RANGE_2G)
         self._mpu6050.set_gyro_range(mpu6050.GYRO_RANGE_250DEG)
@@ -135,10 +135,12 @@ class RobotThread(threading.Thread):
 
     def InitControl(self):
 
-        self._P = 0.2
-        self._I = 0.0
-        self._D = 0.0
+        self._P = 0.8
+        self._I = 14.0
+        self._D = 0.12
+        self._maxIntegralOutput = 9.0
         self._pid = PID(self._P, self._I, self._D)
+        self._pid.setWindup(100.0)
         self._ctrlOutputMin = 1.0  # Volts, min motor output
         self._ctrlOutputMax = 12.0 # Volts, max motor output
 
@@ -172,13 +174,20 @@ class RobotThread(threading.Thread):
         # Filter the angular velocity for controller deriviative term
         self._wFilt[0] = self._wXFilt.Filter(self._dT, self._w[0])
 
+        # If the robot has tipped over, stop trying to control
+        if math.fabs(self._thetaFilt[0]) > 30.0:
+            self._runControl = False
+
         return
 
     def ProcessControl(self):
         # Calculate the control error and rate
         self._ctrlErr = self._thetaFilt[0]
-        self._ctrlErrRate = self._wFilt[0]
-        #self._ctrlErrRate = self._w[0]
+        self._ctrlErrRate = -self._wFilt[0]
+
+        # Adjust the max integral windup
+        if self._pid.Ki > 0.0:
+            self._pid.setWindup(self._maxIntegralOutput / self._pid.Ki)
 
         # Run the PID controller
         self._ctrlOutput = self._pid.update(self._ctrlErr, self._ctrlErrRate)
@@ -191,7 +200,7 @@ class RobotThread(threading.Thread):
 
         # Clear integrator if not running
         if not self._runControl:
-            self._pid.int_error = 0.0
+            self._pid.ITerm = 0.0
 
         return
 
@@ -235,7 +244,7 @@ class RobotThread(threading.Thread):
             self.ProcessMotors()
 
             #logging.debug('running with %s and %s', self.args, self.kwargs)
-            time.sleep(self._sleepTime)
+            #time.sleep(self._sleepTime)
 
         # Stop condition
         self._pi.stop()
@@ -254,6 +263,41 @@ class RobotThread(threading.Thread):
     def Reset(self):
         self._resetFlag = False
 
+    def ProcessCommands(self, cmd, conn):
+        #print cmd
+        next = 0
+        if cmd[0] == "CMD":
+            if cmd[1] == "START":
+                t.StartControl()
+                next = 2
+            if cmd[1] == "STOP":
+                t.StopControl()
+                next = 2
+
+        if cmd[0] == "GET":
+            if cmd[1] == "GAINS":
+                resp = "RESP GAINS {0} {1} {2} ".format(self.Kp, self.Ki, self.Kd)
+                conn.send(resp)
+                next = 2
+            if cmd[1] == "PARAMS":
+                resp = "RESP PARAMS {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} ".format(\
+                    self.CtrlErr, self.CtrlErrRate, self.CtrlOutput, \
+                    self._pid.PTerm, self._pid.ITerm * self._pid.Ki, self._pid.DTerm * self._pid.Kd)
+                conn.send(resp)
+                next = 2
+
+        if cmd[0] == "SET":
+            if cmd[1] == "GAINS":
+                t.Kp = float(cmd[2])
+                t.Ki = float(cmd[3])
+                t.Kd = float(cmd[4])
+                resp = "RESP GAINS {0} {1} {2} ".format(self.Kp, self.Ki, self.Kd)
+                conn.send(resp)
+                next = 5
+
+        if (next < len(cmd)) and (next > 0):
+            self.ProcessCommands(cmd[next:], conn)
+
 TCP_IP = "0.0.0.0"
 TCP_PORT = 9999
 BUFFER_SIZE = 128
@@ -263,37 +307,22 @@ if __name__ == '__main__':
     t.start()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((TCP_IP, TCP_PORT))
     sock.listen(1)
     conn, addr = sock.accept()
     print "Connection Address:", addr
 
     while 1:
-        data = conn.recv(BUFFER_SIZE)
-
-        if not data:
+        try:
+            data = conn.recv(BUFFER_SIZE)
+            if not data:
+                break
+        except:
             break
 
         cmd = data.split()
-        print len(cmd)
-
-        if data == "CMD START":
-            t.StartControl()
-        if data == "CMD STOP":
-            t.StopControl()
-        if data == "GET GAINS":
-            resp = "RESP GAINS {0} {1} {2}".format(t.Kp, t.Ki, t.Kd)
-            conn.send(resp)
-        if data == "GET PARAMS":
-            resp = "RESP PARAMS {0} {1} {2}".format(t.CtrlErr, t.CtrlErrRate, t.CtrlOutput)
-            conn.send(resp)
-
-        if cmd[0] == "SET":
-            if cmd[1] == "GAINS":
-                t.Kp = float(cmd[2])
-                t.Ki = float(cmd[3])
-                t.Kd = float(cmd[4])
-                resp = "RESP GAINS {0} {1} {2}".format(t.Kp, t.Ki, t.Kd)
-                conn.send(resp)
+        #print len(cmd)
+        t.ProcessCommands(cmd, conn)
 
     t.Stop()
